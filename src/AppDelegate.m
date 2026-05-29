@@ -5,6 +5,22 @@
 static NSString *const kRunOnWakeKey     = @"runOnWake";
 static NSString *const kForceEveryWakeKey = @"forceEveryWake";
 
+static const CGFloat kIconHeightBoost = 1.0;
+static NSImage *DFMenuBarImage(NSImage *symbol) {
+    if (!symbol) return symbol;
+    CGFloat h = NSStatusBar.systemStatusBar.thickness;
+    NSSize s = symbol.size;
+    CGFloat scale = (s.height + kIconHeightBoost) / s.height;
+    CGFloat dw = s.width * scale, dh = s.height * scale;
+    NSImage *out = [NSImage imageWithSize:NSMakeSize(dw, h) flipped:NO drawingHandler:^BOOL(NSRect r) {
+        [symbol drawInRect:NSMakeRect(0, floor((h - dh) / 2.0), dw, dh)
+                  fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:1.0];
+        return YES;
+    }];
+    out.template = YES;
+    return out;
+}
+
 @implementation AppDelegate {
     NSStatusItem *_item;
     dispatch_queue_t _q;
@@ -59,7 +75,9 @@ static void DFReconfigCallback(CGDirectDisplayID display, CGDisplayChangeSummary
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), _q, ^{
         if (self->_fixing) { DFLog(@"fix: already running, skipping (%@)", reason); return; }
         self->_fixing = YES;
-        dispatch_async(dispatch_get_main_queue(), ^{ self->_item.button.title = @"⟳"; });
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self setStatusSymbol:@"arrow.triangle.2.circlepath" fallback:@"⟳" tooltip:@"DisplayFixer: working…"];
+        });
         DFLog(@"fix: start (%@, force=%d)", reason, force);
         NSString *summary = nil;
         DFResult r = DFRunFix(force, &summary);
@@ -71,15 +89,30 @@ static void DFReconfigCallback(CGDirectDisplayID display, CGDisplayChangeSummary
 
 #pragma mark - menu / status
 
+- (void)setStatusSymbol:(NSString *)name fallback:(NSString *)glyph tooltip:(NSString *)tip {
+    NSImage *img = [NSImage imageWithSystemSymbolName:name accessibilityDescription:tip];
+    if (img) {
+        _item.button.image = DFMenuBarImage(img);
+        _item.button.imageScaling = NSImageScaleNone;
+        _item.button.imagePosition = NSImageOnly;
+        _item.button.title = @"";
+    } else {
+        _item.button.image = nil;
+        _item.button.title = glyph;
+    }
+    _item.button.toolTip = tip;
+}
+
 - (void)refreshStatus {
     CGDirectDisplayID d = DFExternalDisplay();
-    NSString *glyph;
-    if (d == kCGNullDirectDisplay)      glyph = @"⊝";          // no external display
-    else if (DFIsDegraded(d))           glyph = @"▲";          // degraded
-    else                                glyph = @"✓";          // good
-    _item.button.title = glyph;
-    _item.button.toolTip = DFStatusLine();
-    if (_item.menu.itemArray.count) ((NSMenuItem *)_item.menu.itemArray.firstObject).title = DFStatusLine();
+    NSString *tip = DFStatusLine();
+    if (d == kCGNullDirectDisplay)
+        [self setStatusSymbol:@"display"                       fallback:@"⊝" tooltip:tip];  // no external display
+    else if (DFIsDegraded(d))
+        [self setStatusSymbol:@"exclamationmark.triangle.fill" fallback:@"▲" tooltip:tip];  // degraded
+    else
+        [self setStatusSymbol:@"checkmark.circle.fill"         fallback:@"✓" tooltip:tip];  // good
+    if (_item.menu.itemArray.count) ((NSMenuItem *)_item.menu.itemArray.firstObject).title = tip;
 }
 
 - (void)rebuildMenu {
