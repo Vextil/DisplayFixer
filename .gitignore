@@ -1,0 +1,28 @@
+# Build artifacts
+.build/
+.swiftpm/
+DerivedData/
+build/
+*.o
+*.swiftmodule
+
+# Built app bundle (rebuilt via ./build.sh; not committed)
+*.app
+
+# Runtime logs
+logs/
+
+# Research/spike probes: keep the .m/.md sources, ignore compiled binaries & dumps
+research/*
+!research/*.m
+!research/*.md
+
+# Xcode user state
+xcuserdata/
+*.xcuserstate
+
+# macOS
+.DS_Store
+
+# Internal design docs (not published)
+docs/
