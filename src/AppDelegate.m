@@ -31,6 +31,7 @@ static AppDelegate *gSelf;
 
 // CGDisplay reconfiguration callback — fires on connect/mode change. Event-driven, not polling.
 static void DFReconfigCallback(CGDirectDisplayID display, CGDisplayChangeSummaryFlags flags, void *ctx) {
+    if (![[NSUserDefaults standardUserDefaults] boolForKey:kRunOnWakeKey]) return;
     // Ignore our own begin/end-of-reconfigure churn; act on add/enable.
     if (flags & (kCGDisplayAddFlag | kCGDisplayEnabledFlag)) {
         [gSelf scheduleFixAfter:2.5 force:NO reason:@"display connected"];
