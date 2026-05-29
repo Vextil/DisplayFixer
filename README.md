@@ -7,6 +7,8 @@ as washed-out 8-bit YCbCr 4:2:2 every time the Mac wakes from sleep.
 I built it for my own setup: an M4 Pro on macOS 26.4.1 running a 4K 165 Hz display through a
 Cable Matters VMM7100 adapter. That's the only place it's been tested, so your mileage may vary.
 
+![DisplayFixer's menubar item and menu](screenshot.png)
+
 ## The problem
 
 The adapter shows up to macOS as a DisplayPort sink (DP 1.4 / HBR3) and converts to HDMI 2.1 on
