@@ -11,6 +11,11 @@ extern int      SLSDisplaySupportsHDRMode(CGDirectDisplayID);
 extern int      SLSDisplayIsHDRModeEnabled(CGDirectDisplayID);
 extern CGSError SLSDisplaySetHDRModeEnabled(CGDirectDisplayID, bool);
 
+// IOAVVideoInterface, the DCP's live per-link color data
+typedef CFTypeRef IOAVVideoInterfaceRef;
+extern IOAVVideoInterfaceRef IOAVVideoInterfaceCreateWithLocation(CFAllocatorRef, uint32_t); // 0 = External
+extern CFArrayRef IOAVVideoInterfaceCopyColorElements(IOAVVideoInterfaceRef);
+
 // ---- VMM7100 "reset board" HID packets (waydabber/vmm7100reset; "PRIUS" unlock in P1) ----
 static uint8_t P1[62] = {0x01,0x00,0x11,0x00,0x00,0x81,0x00,0x00,0x00,0x00,0x00,0x05,0x00,0x00,0x00,0x50,0x52,0x49,0x55,0x53,0xD6};
 static uint8_t P2[62] = {0x01,0x00,0x0C,0x00,0x00,0xB1,0x00,0x2C,0x02,0x20,0x20,0x04,0x00,0x00,0x00,0xD1,0x20,0x00,0x71,[47]=0xB8};
@@ -35,7 +40,29 @@ CGDirectDisplayID DFExternalDisplay(void) {
     return kCGNullDirectDisplay;
 }
 
-BOOL DFIsDegraded(CGDirectDisplayID d) { return d != kCGNullDirectDisplay && SLSDisplaySupportsHDRMode(d) == 0; }
+// "Degraded" = the DSC link is not currently active (so the wire fell back to ~8-bit 4:2:2).
+// From what I understand, every connection color element's `SupportsDSC` low bit tracks live DSC state:
+// in the good state DSC-capable modes read 3 and virtuals 1 (bit0 set); when DSC drops they read
+// 2 and 0 (bit0 clear) across the board. So if no element reports DSC active, we're degraded.
+BOOL DFIsDegraded(CGDirectDisplayID d) {
+    (void)d;
+    IOAVVideoInterfaceRef vi = IOAVVideoInterfaceCreateWithLocation(kCFAllocatorDefault, 0); // External
+    if (!vi) return NO;  // can't read the link — don't claim degraded
+    CFArrayRef elems = IOAVVideoInterfaceCopyColorElements(vi);
+    BOOL dscActive = NO;
+    if (elems) {
+        for (CFIndex i = 0; i < CFArrayGetCount(elems) && !dscActive; i++) {
+            CFDictionaryRef e = CFArrayGetValueAtIndex(elems, i);
+            if (CFGetTypeID(e) != CFDictionaryGetTypeID()) continue;
+            CFNumberRef v = CFDictionaryGetValue(e, CFSTR("SupportsDSC"));
+            long s = 0;
+            if (v && CFGetTypeID(v) == CFNumberGetTypeID() && CFNumberGetValue(v, kCFNumberLongType, &s) && (s & 1)) dscActive = YES;
+        }
+        CFRelease(elems);
+    }
+    CFRelease(vi);
+    return !dscActive;
+}
 
 NSString *DFStatusLine(void) {
     CGDirectDisplayID d = DFExternalDisplay();
@@ -120,7 +147,9 @@ DFResult DFRunFix(BOOL force, NSString **summaryOut) {
         for (int k = 0; k < 12; k++) { usleep(300000); if (!SLSDisplayIsHDRModeEnabled(d2)) { off = YES; break; } }
         if (!off) DFLog(@"fix: HDR still on after disable attempt %d; retrying", attempt + 1);
     }
-    DFLog(@"fix: done (HDRon=%d)%@", SLSDisplayIsHDRModeEnabled(d2), off ? @"" : @" — WARNING: HDR did not turn off");
-    if (summaryOut) *summaryOut = off ? @"reset + 10-bit 4:4:4 (SDR)" : @"reset done, but HDR stuck on";
+    BOOL stillDegraded = DFIsDegraded(d2);
+    DFLog(@"fix: done (HDRon=%d, degraded=%d)%@", SLSDisplayIsHDRModeEnabled(d2), stillDegraded,
+          off ? @"" : @" — WARNING: HDR did not turn off");
+    if (summaryOut) *summaryOut = stillDegraded ? @"reset done, but still degraded" : @"reset + 10-bit 4:4:4 (SDR)";
     return DFResultFixed;
 }
