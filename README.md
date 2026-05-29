@@ -34,8 +34,8 @@ A few details that weren't obvious and are worth writing down:
   On macOS 26 you can't open the USB *interface* anymore (it returns `kIOReturnExclusiveAccess`),
   which is _probably_ what broke BetterDisplay's version of this reset. DisplayFixer sends the packets
   through a device-level `DeviceRequest` instead, and that still works.
-- It decides whether a fix is needed by checking `SLSDisplaySupportsHDRMode`, which reads 0 while
-  the DSC link is down. That turns out to be a reliable enough "we're in the bad state" signal.
+- It reads the live link state straight from the DCP (`IOAVVideoInterfaceGetLinkData`) and corroborates 
+  that with a scan of the connection colour elements for the live-DSC bit.
 - The 10-bit 4:4:4 comes from the HDR toggle (`SLSDisplaySetHDRModeEnabled`). Turning HDR on
   forces 10-bit, and therefore DSC; turning it back off leaves you at 10-bit 4:4:4 without HDR.
 

@@ -13,8 +13,12 @@ typedef NS_ENUM(int, DFResult) {
 /// First non-builtin display, or kCGNullDirectDisplay.
 CGDirectDisplayID DFExternalDisplay(void);
 
-/// YES when the link is NOT DSC-capable (HDR unsupported) — our proxy for "stuck at 8-bit 4:2:2".
+/// YES when the wire has fallen back from 10-bit 4:4:4 (DSC) to ~8-bit 4:2:2.
 BOOL DFIsDegraded(CGDirectDisplayID d);
+
+/// Read the live negotiated link state off the DCP (the exact wire format). Returns NO if unavailable.
+/// Any out-param may be NULL. depth = active bits-per-component; dsc = DSC/4:4:4 active.
+BOOL DFReadActiveLink(int *depthOut, BOOL *dscOut, int *wOut, int *hOut, int *refrOut);
 
 /// Human-readable one-liner for the menu/tooltip.
 NSString *DFStatusLine(void);

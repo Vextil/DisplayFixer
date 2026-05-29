@@ -28,16 +28,16 @@ static NSImage *DFMenuBarImage(NSImage *symbol) {
     dispatch_queue_t _q;
     BOOL _fixing;
     NSTimeInterval _lastFixEnd;
+}
 
 static AppDelegate *gSelf;
 
 // CGDisplay reconfiguration callback — fires on connect/mode change. Event-driven, not polling.
 static void DFReconfigCallback(CGDirectDisplayID display, CGDisplayChangeSummaryFlags flags, void *ctx) {
-    if (![[NSUserDefaults standardUserDefaults] boolForKey:kRunOnWakeKey]) return;
-    // Ignore our own begin/end-of-reconfigure churn; act on add/enable.
-    if (flags & (kCGDisplayAddFlag | kCGDisplayEnabledFlag)) {
+    if (flags & kCGDisplayBeginConfigurationFlag) return;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [gSelf refreshStatus]; });
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:kRunOnWakeKey] && (flags & (kCGDisplayAddFlag | kCGDisplayEnabledFlag)))
         [gSelf scheduleFixAfter:2.5 force:NO reason:@"display connected"];
-    }
 }
 
 #pragma mark - lifecycle
@@ -66,6 +66,8 @@ static void DFReconfigCallback(CGDirectDisplayID display, CGDisplayChangeSummary
 
 - (void)didWake:(NSNotification *)n {
     DFLog(@"app: wake detected");
+    // Update the icon once the display settles, whether or not auto-fix is enabled.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self refreshStatus]; });
     if ([[NSUserDefaults standardUserDefaults] boolForKey:kRunOnWakeKey]) {
         BOOL force = [[NSUserDefaults standardUserDefaults] boolForKey:kForceEveryWakeKey];
         [self scheduleFixAfter:3.0 force:force reason:@"wake"];
@@ -126,8 +128,12 @@ static void DFReconfigCallback(CGDirectDisplayID display, CGDisplayChangeSummary
     if (_item.menu.itemArray.count) ((NSMenuItem *)_item.menu.itemArray.firstObject).title = tip;
 }
 
+// Refresh state the instant the user opens the menu.
+- (void)menuNeedsUpdate:(NSMenu *)menu { [self refreshStatus]; }
+
 - (void)rebuildMenu {
     NSMenu *menu = [[NSMenu alloc] init];
+    menu.delegate = self;
     NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
 
     NSMenuItem *status = [[NSMenuItem alloc] initWithTitle:DFStatusLine() action:nil keyEquivalent:@""];
