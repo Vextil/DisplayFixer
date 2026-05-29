@@ -5,6 +5,8 @@
 static NSString *const kRunOnWakeKey     = @"runOnWake";
 static NSString *const kForceEveryWakeKey = @"forceEveryWake";
 
+static const NSTimeInterval kFixCooldown = 30.0;
+
 static const CGFloat kIconHeightBoost = 1.0;
 static NSImage *DFMenuBarImage(NSImage *symbol) {
     if (!symbol) return symbol;
@@ -25,7 +27,7 @@ static NSImage *DFMenuBarImage(NSImage *symbol) {
     NSStatusItem *_item;
     dispatch_queue_t _q;
     BOOL _fixing;
-}
+    NSTimeInterval _lastFixEnd;
 
 static AppDelegate *gSelf;
 
@@ -73,8 +75,15 @@ static void DFReconfigCallback(CGDirectDisplayID display, CGDisplayChangeSummary
 #pragma mark - fix scheduling
 
 - (void)scheduleFixAfter:(double)delay force:(BOOL)force reason:(NSString *)reason {
+    BOOL manual = [reason isEqualToString:@"manual"];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), _q, ^{
         if (self->_fixing) { DFLog(@"fix: already running, skipping (%@)", reason); return; }
+        // Debounce auto-triggers: skip if a fix just ran (breaks the reset->reconnect->reset loop).
+        NSTimeInterval now = NSProcessInfo.processInfo.systemUptime;
+        if (!manual && self->_lastFixEnd > 0 && now - self->_lastFixEnd < kFixCooldown) {
+            DFLog(@"fix: skipping %@ — within %.0fs cooldown after last fix", reason, kFixCooldown);
+            return;
+        }
         self->_fixing = YES;
         dispatch_async(dispatch_get_main_queue(), ^{
             [self setStatusSymbol:@"arrow.triangle.2.circlepath" fallback:@"⟳" tooltip:@"DisplayFixer: working…"];
@@ -83,6 +92,7 @@ static void DFReconfigCallback(CGDirectDisplayID display, CGDisplayChangeSummary
         NSString *summary = nil;
         DFResult r = DFRunFix(force, &summary);
         DFLog(@"fix: end result=%d (%@)", r, summary ?: @"");
+        if (r == DFResultFixed) self->_lastFixEnd = NSProcessInfo.processInfo.systemUptime;  // cooldown only after a real reset
         self->_fixing = NO;
         dispatch_async(dispatch_get_main_queue(), ^{ [self refreshStatus]; });
     });
