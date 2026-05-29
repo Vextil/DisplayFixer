@@ -16,7 +16,7 @@ the far side. At 4K 165 Hz, 10-bit 4:4:4 only fits down the DisplayPort link wit
 Stream Compression) turned on. After a wake, macOS often fails to bring DSC back up, so it falls
 back to the densest format that fits without it: 8-bit YCbCr 4:2:2. It also stops offering 10-bit
 4:4:4 at all until the link is renegotiated. The manual fix most people land on is to unplug and
-replug the cable (or toggle HDR), then reselect 10-bit. DisplayFixer does that part for you.
+replug the cable, then toggle HDR on/off or reselect 10-bit. DisplayFixer does that part for you.
 
 ## What it does
 
